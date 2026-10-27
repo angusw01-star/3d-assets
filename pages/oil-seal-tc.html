@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TC 油封剖面</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <style>
+    :root { --panel: #ffffffee; --text: #222; --muted: #666; --accent: #d9822b; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #e9edf2; color: var(--text);
+      font-family: system-ui, "Microsoft JhengHei", "PingFang TC", sans-serif; }
+    .panel { position: absolute; background: var(--panel); border-radius: 10px; box-shadow: 0 2px 10px #0002;
+      padding: 12px 14px; font-size: 14px; }
+    #ctrl { top: 12px; left: 12px; width: 210px; }
+    #ctrl h1 { margin: 0 0 8px; font-size: 17px; }
+    #ctrl .dims { display: flex; gap: 6px; margin: 6px 0; }
+    #ctrl .dims label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); margin: 0; }
+    #ctrl input[type=number] { width: 54px; font-size: 14px; padding: 2px 4px; }
+    #ctrl .seg { display: flex; gap: 4px; margin: 6px 0; }
+    #ctrl .seg button { flex: 1; padding: 5px 0; border: 1px solid #bbb; background: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    #ctrl .seg button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    #ctrl .checks label { display: inline-block; margin: 2px 10px 2px 0; cursor: pointer; }
+    #info { bottom: 12px; left: 12px; right: 12px; max-width: 520px; display: none; }
+    #info h2 { margin: 0 0 4px; font-size: 16px; color: var(--accent); }
+    #info p { margin: 0; line-height: 1.5; }
+    #hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+    .anchor { width: 0; height: 0; }
+    .anchor .dot { position: absolute; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: var(--accent); }
+    .anchor .line { position: absolute; height: 1px; background: var(--accent); transform-origin: 0 0; }
+    .tag { position: absolute; font-size: 13px; padding: 2px 8px; border-radius: 10px; background: #fffe; border: 1px solid #ccc;
+      white-space: nowrap; cursor: pointer; transform: translate(-50%, -50%); }
+    .tag.side { position: static; display: inline-block; background: #2d5d8a; color: #fff; border: none; cursor: default; transform: none; }
+    @media (max-width: 600px) { .panel { font-size: 13px; padding: 8px 10px; } #ctrl h1 { font-size: 15px; } #hint { display: none; } }
+  </style>
+</head>
+<body>
+  <div id="ctrl" class="panel">
+    <h1>TC 型油封剖面</h1>
+    <div class="dims">
+      <label>內徑<input id="d" type="number" min="8" max="200" value="30"></label>
+      <label>外徑<input id="D" type="number" min="12" max="240" value="47"></label>
+      <label>寬<input id="b" type="number" min="4" max="20" value="7"></label>
+    </div>
+    <div class="seg" id="cutSeg">
+      <button data-cut="0">完整</button><button data-cut="0.25" class="on">切 1/4</button><button data-cut="0.5">切 1/2</button>
+    </div>
+    <div class="checks">
+      <label><input id="showShaft" type="checkbox" checked> 顯示軸</label>
+      <label><input id="showTags" type="checkbox" checked> 顯示名稱</label>
+    </div>
+    <div id="hint">點選部件看說明・拖曳旋轉・滾輪縮放</div>
+  </div>
+  <div id="info" class="panel"><h2></h2><p></p></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+    import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+    // ---- 部件說明 ----
+    const PARTS = {
+      rubber: { name: '橡膠本體（NBR 丁腈橡膠）', desc: '包覆金屬骨架。外徑包膠與孔座形成靜態密封；內側做出主唇與副唇。TC 型的「T」指雙唇、「C」指外徑包膠。' },
+      mainLip: { name: '主唇', desc: '朝向油側，以微小的過盈量貼住旋轉軸，形成動態密封，擋住潤滑油外漏。唇口很窄，接觸寬度只有約 0.1–0.3 mm。' },
+      dustLip: { name: '副唇（防塵唇）', desc: '朝向大氣側，擋住灰塵、泥水進入，保護主唇。副唇不加彈簧，接觸力較輕。' },
+      odRubber: { name: '外徑包膠', desc: '外徑的橡膠層壓入孔座後被壓縮，填滿孔壁的細微凹凸，防止油從外徑滲出。' },
+      caseMetal: { name: '金屬骨架', desc: '鋼板沖壓成 L 形，提供剛性，讓油封能緊配合壓入孔座，不會變形或滑動。' },
+      spring: { name: '彈簧（環形拉伸彈簧）', desc: '箍在主唇外側，提供穩定的徑向壓力，補償唇口磨耗、橡膠老化和軸的偏擺。' },
+    };
+
+    // ---- 斷面輪廓（基準：30×47×7，x = 從內徑起算的徑向距離，y = 軸向，y=0 大氣側，y=b 油側） ----
+    const REF = { h: 8.5, b: 7 };
+    const SPRING = { x: 2.6, y: 5.0, r: 0.8 };
+    const arc = (cx, cy, r, from, to, n) => Array.from({ length: n + 1 }, (_, i) => {
+      const a = THREE.MathUtils.degToRad(from + (to - from) * i / n);
+      return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    });
+    const RUBBER = [
+      [8.5, 0], [8.5, 6.5], [8.0, 7.0], [5.2, 7.0], [5.0, 4.0], [4.2, 3.6], [3.6, 4.0],
+      ...arc(SPRING.x, SPRING.y, 0.85, -60, -240, 12),   // 彈簧槽
+      [2.0, 6.8], [0.0, 5.2], [0.15, 4.8], [0.9, 3.8], [0.9, 2.6],
+      [0.0, 0.8], [0.3, 0.5], [1.6, 1.6], [2.2, 0.0],
+    ];
+    const CASE = [[7.8, 0.6], [7.8, 6.4], [7.2, 6.4], [7.2, 1.2], [2.8, 1.2], [2.8, 0.6]];
+    // 標籤錨點（斷面座標）與標籤在螢幕上的偏移（px），用引線連到錨點，避免互相重疊
+    const TAGS = {
+      mainLip: { at: [0.0, 5.2], off: [-70, 40] },
+      dustLip: { at: [0.0, 0.8], off: [-75, -35] },
+      spring: { at: [SPRING.x, SPRING.y], off: [10, 75] },
+      caseMetal: { at: [5.0, 0.9], off: [70, -55] },
+      odRubber: { at: [8.5, 3.5], off: [90, 15] },
+    };
+
+    // ---- 場景 ----
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+    const labels = new CSS2DRenderer();
+    labels.setSize(innerWidth, innerHeight);
+    Object.assign(labels.domElement.style, { position: 'absolute', top: '0', pointerEvents: 'none' });
+    document.body.appendChild(labels.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xe9edf2);
+    scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 1, 5000);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+    sun.position.set(1, 2, 3);
+    scene.add(sun);
+
+    const mats = {
+      rubber: new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.75, side: THREE.DoubleSide }),
+      caseMetal: new THREE.MeshStandardMaterial({ color: 0xb9bec6, metalness: 0.85, roughness: 0.35, side: THREE.DoubleSide }),
+      spring: new THREE.MeshStandardMaterial({ color: 0xd8c27a, metalness: 0.9, roughness: 0.3 }),
+      shaft: new THREE.MeshStandardMaterial({ color: 0x9fb6cc, metalness: 0.6, roughness: 0.25, transparent: true, opacity: 0.22, depthWrite: false }),
+    };
+
+    const seal = new THREE.Group();        // 軸向沿 Y，整組轉成軸向朝向觀看者
+    seal.rotation.x = Math.PI / 2;
+    scene.add(seal);
+    let built = [];
+
+    // 斷面繞 Y 軸旋轉成實體；切開時在兩端補上斷面
+    function revolve(profile, Ri, sx, sy, phiStart, sweep, mat, part, hole) {
+      const pts = profile.map(([x, y]) => new THREE.Vector2(Ri + x * sx, y * sy));
+      const group = new THREE.Group();
+      const lathe = new THREE.LatheGeometry([...pts, pts[0]], 192, phiStart, sweep).toNonIndexed();
+      lathe.computeVertexNormals();
+      group.add(new THREE.Mesh(lathe, mat));
+      if (sweep < Math.PI * 2) {
+        const shape = new THREE.Shape(pts);
+        if (hole) shape.holes.push(new THREE.Path(hole.map(([x, y]) => new THREE.Vector2(Ri + x * sx, y * sy))));
+        for (const phi of [phiStart, phiStart + sweep]) {
+          const cap = new THREE.ShapeGeometry(shape);
+          cap.rotateY(phi - Math.PI / 2);
+          group.add(new THREE.Mesh(cap, mat));
+        }
+      }
+      group.traverse((o) => { o.userData.part = part; });
+      return group;
+    }
+
+    // 環形彈簧：沿圓周繞的螺旋線
+    class GarterCurve extends THREE.Curve {
+      constructor(R, y, rc, turns, phiStart, sweep) { super(); Object.assign(this, { R, y, rc, turns, phiStart, sweep }); }
+      getPoint(t, out = new THREE.Vector3()) {
+        const phi = this.phiStart + t * this.sweep, psi = t * this.turns * Math.PI * 2;
+        const r = this.R + this.rc * Math.cos(psi);
+        return out.set(r * Math.sin(phi), this.y + this.rc * Math.sin(psi), r * Math.cos(phi));
+      }
+    }
+
+    function tag(part, text, pos, off) {
+      const el = document.createElement('div');
+      if (!off) {
+        el.innerHTML = `<span class="tag side">${text}</span>`;
+      } else {
+        const [dx, dy] = off, len = Math.hypot(dx, dy);
+        el.className = 'anchor';
+        el.innerHTML = `<div class="line" style="width:${len}px;transform:rotate(${Math.atan2(dy, dx)}rad)"></div>`
+          + `<div class="dot"></div><div class="tag" style="left:${dx}px;top:${dy}px">${text}</div>`;
+        const t = el.querySelector('.tag');
+        t.style.pointerEvents = 'auto';
+        t.onclick = () => select(part);
+      }
+      const obj = new CSS2DObject(el);
+      obj.position.copy(pos);
+      obj.userData.isTag = true;
+      return obj;
+    }
+
+    const state = { cut: 0.25 };
+    function build() {
+      for (const o of built) { seal.remove(o); o.traverse((c) => { c.geometry?.dispose(); if (c.element) c.element.remove(); }); }
+      built = [];
+      const d = Math.max(+document.getElementById('d').value, 4);
+      const D = Math.max(+document.getElementById('D').value, d + 4);
+      const b = Math.max(+document.getElementById('b').value, 3);
+      const Ri = d / 2, sx = (D - d) / 2 / REF.h, sy = b / REF.b, s = Math.min(sx, sy);
+      const sweep = Math.PI * 2 * (1 - state.cut);
+      const phiStart = Math.PI * 0.75 + Math.PI * state.cut;   // 缺口中心在 135°，轉正後朝向右上方的鏡頭
+      const add = (o) => { seal.add(o); built.push(o); };
+
+      add(revolve(RUBBER, Ri, sx, sy, phiStart, sweep, mats.rubber, 'rubber', CASE));
+      add(revolve(CASE, Ri, sx, sy, phiStart, sweep, mats.caseMetal, 'caseMetal'));
+
+      const R = Ri + SPRING.x * sx, rc = SPRING.r * s * 0.8;
+      const turns = Math.round((2 * Math.PI * R * (1 - state.cut)) / (rc * 0.9));
+      const spring = new THREE.Mesh(
+        new THREE.TubeGeometry(new GarterCurve(R, SPRING.y * sy, rc, turns, phiStart, sweep), turns * 10, rc * 0.28, 6, false),
+        mats.spring);
+      spring.userData.part = 'spring';
+      add(spring);
+
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(Ri, Ri, b * 2.6, 96), mats.shaft);
+      shaft.position.y = b / 2;
+      shaft.visible = document.getElementById('showShaft').checked;
+      shaft.userData.isShaft = true;
+      add(shaft);
+
+      // 名稱標籤放在切開的斷面上
+      const tags = new THREE.Group();
+      tags.visible = document.getElementById('showTags').checked;
+      const phiEnd = phiStart + sweep;
+      if (state.cut > 0) {
+        for (const [part, { at: [x, y], off }] of Object.entries(TAGS)) {
+          const r = Ri + x * sx;
+          tags.add(tag(part, PARTS[part].name.replace(/（.*）/, ''), new THREE.Vector3(r * Math.sin(phiEnd), y * sy, r * Math.cos(phiEnd)), off));
+        }
+      }
+      tags.add(tag(null, '油側', new THREE.Vector3(0, b * 1.9, 0)));
+      tags.add(tag(null, '大氣側', new THREE.Vector3(0, -b * 0.9, 0)));
+      tags.userData.isTagGroup = true;
+      add(tags);
+
+      document.querySelector('#ctrl h1').textContent = `TC 型油封 ${d}×${D}×${b}`;
+      return D;
+    }
+
+    function frame(D) {
+      camera.position.set(D * 0.9, D * 0.7, D * 1.35);
+      controls.target.set(0, 0, 0);
+      controls.update();
+    }
+
+    // ---- 點選 ----
+    const info = document.getElementById('info');
+    let selected = null;
+    function select(part) {
+      for (const m of [mats.rubber, mats.caseMetal, mats.spring]) m.emissive.setHex(0);
+      selected = part;
+      if (!part) { info.style.display = 'none'; return; }
+      const mat = part === 'caseMetal' ? mats.caseMetal : part === 'spring' ? mats.spring : mats.rubber;
+      mat.emissive.setHex(0x3a2008);
+      info.querySelector('h2').textContent = PARTS[part].name;
+      info.querySelector('p').textContent = PARTS[part].desc;
+      info.style.display = 'block';
+    }
+    const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+    let down = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
+    renderer.domElement.addEventListener('pointerup', (e) => {
+      if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return;   // 拖曳不算點選
+      ptr.set(e.clientX / innerWidth * 2 - 1, -e.clientY / innerHeight * 2 + 1);
+      ray.setFromCamera(ptr, camera);
+      const hit = ray.intersectObjects(seal.children, true).find((h) => !h.object.userData.isShaft && h.object.userData.part);
+      select(hit ? hit.object.userData.part : null);
+    });
+
+    // ---- 控制項 ----
+    for (const id of ['d', 'D', 'b']) document.getElementById(id).addEventListener('change', () => frame(build()));
+    document.querySelectorAll('#cutSeg button').forEach((btn) => btn.addEventListener('click', () => {
+      document.querySelectorAll('#cutSeg button').forEach((x) => x.classList.toggle('on', x === btn));
+      state.cut = +btn.dataset.cut;
+      build();
+    }));
+    document.getElementById('showShaft').addEventListener('change', (e) => {
+      seal.traverse((o) => { if (o.userData.isShaft) o.visible = e.target.checked; });
+    });
+    document.getElementById('showTags').addEventListener('change', (e) => {
+      seal.traverse((o) => { if (o.userData.isTagGroup) o.visible = e.target.checked; });
+    });
+
+    frame(build());
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      labels.setSize(innerWidth, innerHeight);
+    });
+    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); labels.render(scene, camera); });
+  </script>
+</body>
+</html>
