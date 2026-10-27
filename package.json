@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "optimize": "node scripts/optimize.mjs"
+    "optimize": "node scripts/optimize.mjs",
+    "prep": "node scripts/blender.mjs"
   },
   "devDependencies": {
     "@gltf-transform/cli": "^4.5.1"

@@ -25,7 +25,23 @@
 3. 壓縮：`npm run optimize`（處理 `models/raw/` 裡所有 `.glb`，輸出到 `models/optimized/`）。平板上每個模型控制在 2–5 MB 以內。
 4. commit 並 push 後，用 jsDelivr 載入（見下方）。
 
+注意：使用者的 Meshy 目前是免費方案，CLI/API 建立任務會被拒（402，不扣點）。升級前不要送出生成任務。
+
 MCP server（`.mcp.json` 的 `meshy`）是備用通道，需要 Pro 方案的 API key，從環境變數 `MESHY_API_KEY` 讀取。API key 不可寫進任何檔案。
+
+## Blender
+
+Blender 5.2 安裝在 `C:\Program Files\Blender Foundation\Blender 5.2\`。
+
+**主力：背景腳本**（不開視窗，穩定、可批次）
+- `npm run prep -- <輸入檔> [--faces 50000] [--out 輸出.glb]`：匯入 GLB/glTF/FBX/OBJ/STL，可減面，匯出 GLB 到 `models/raw/`（減面時檔名加 `-lite`）。接著再跑 `npm run optimize`。
+- 平板用的模型建議 2 萬–5 萬個三角面。
+- 其他處理（拆部件、改材質、算體積…）寫成 `scripts/blender/*.py`，用 `blender -b --factory-startup --python 腳本.py -- 參數` 執行。
+
+**選配：Blender MCP**（使用者打開 Blender，Claude 即時操作）
+- `.mcp.json` 的 `blender`（套件 `mcp-for-blender`，已關閉遙測），預設在 `.claude/settings.local.json` 的 `disabledMcpjsonServers` 停用。使用者要用時，把 `blender` 從該清單移除並重開對話；用完再加回去。
+- Blender 的 addon「MCP for Blender」已安裝並啟用；Blender 開啟時會在 localhost 啟動連線，也可以按 N → MCP for Blender 分頁 → Start MCP Server。
+- 這台電腦的網路會攔截 TLS，uv/uvx 一律加 `--system-certs`。
 
 ## jsDelivr 載入
 

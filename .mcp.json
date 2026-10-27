@@ -2,9 +2,24 @@
   "mcpServers": {
     "meshy": {
       "command": "npx",
-      "args": ["-y", "@meshy-ai/meshy-mcp-server"],
+      "args": [
+        "-y",
+        "@meshy-ai/meshy-mcp-server"
+      ],
       "env": {
         "MESHY_API_KEY": "${MESHY_API_KEY}"
+      }
+    },
+    "blender": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "uvx",
+        "--system-certs",
+        "mcp-for-blender"
+      ],
+      "env": {
+        "DISABLE_TELEMETRY": "true"
       }
     }
   }

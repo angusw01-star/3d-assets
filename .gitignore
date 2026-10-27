@@ -7,3 +7,4 @@ meshy_output/
 prompt.txt
 建議方案.txt
 others/
+.claude/settings.local.json
