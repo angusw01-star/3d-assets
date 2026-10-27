@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Three.js 範本</title>
+  <!-- 用法：three-template.html            顯示程式產生的 O-ring 剖面
+             three-template.html?src=<GLB> 另外載入一個 GLB 模型 -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #eef1f5; font-family: system-ui, "Microsoft JhengHei", sans-serif; }
+    #ui { position: absolute; top: 12px; left: 12px; background: #fffd; padding: 10px 14px; border-radius: 8px; font-size: 14px; }
+    #ui label { display: block; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <label>內徑 <input id="id" type="range" min="10" max="60" value="30"> <span id="idv"></span> mm</label>
+    <label>線徑 <input id="cs" type="range" min="2" max="12" value="6"> <span id="csv"></span> mm</label>
+    <label><input id="cut" type="checkbox" checked> 切開看剖面</label>
+  </div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xeef1f5);
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 2000);
+    camera.position.set(60, 50, 80);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 2));
+    const sun = new THREE.DirectionalLight(0xffffff, 2);
+    sun.position.set(50, 100, 50);
+    scene.add(sun);
+
+    // 程式產生幾何：畫斷面輪廓，用 LatheGeometry 繞 Y 軸旋轉成形
+    const material = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.6, side: THREE.DoubleSide });
+    let ring;
+    function buildRing() {
+      const inner = +document.getElementById('id').value / 2;
+      const r = +document.getElementById('cs').value / 2;
+      const cut = document.getElementById('cut').checked;
+      document.getElementById('idv').textContent = inner * 2;
+      document.getElementById('csv').textContent = r * 2;
+
+      const profile = [];
+      for (let i = 0; i <= 48; i++) {
+        const a = (i / 48) * Math.PI * 2;
+        profile.push(new THREE.Vector2(inner + r + r * Math.cos(a), r * Math.sin(a)));
+      }
+      const sweep = cut ? Math.PI * 1.5 : Math.PI * 2; // 切掉 1/4 露出剖面
+      const geo = new THREE.LatheGeometry(profile, 128, 0, sweep);
+      if (ring) { scene.remove(ring); ring.geometry.dispose(); }
+      ring = new THREE.Mesh(geo, material);
+      scene.add(ring);
+    }
+    for (const el of ['id', 'cs', 'cut']) document.getElementById(el).addEventListener('input', buildRing);
+    buildRing();
+
+    // 載入 GLB（壓縮過的檔案需要 MeshoptDecoder）
+    const src = new URLSearchParams(location.search).get('src');
+    if (src) {
+      const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+      loader.load(src, (gltf) => {
+        const model = gltf.scene;
+        const box = new THREE.Box3().setFromObject(model);
+        const s = 30 / box.getSize(new THREE.Vector3()).length();
+        model.scale.setScalar(s);
+        // 把模型中心移到 O-ring 上方
+        const center = box.getCenter(new THREE.Vector3()).multiplyScalar(s);
+        model.position.set(-center.x, 25 - center.y, -center.z);
+        scene.add(model);
+      }, undefined, (err) => console.error('模型載入失敗', err));
+    }
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+  </script>
+</body>
+</html>

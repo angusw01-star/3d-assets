@@ -1,0 +1,11 @@
+{
+  "name": "3d-design",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "optimize": "node scripts/optimize.mjs"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.5.1"
+  }
+}

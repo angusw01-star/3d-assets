@@ -1,0 +1,47 @@
+# 3D 設計專案
+
+給孩子的教育遊戲與教育訓練用的 3D 模型和網頁。完整背景見 `建議方案.txt`。
+
+## 資料夾
+
+| 路徑 | 用途 | 進 git |
+|---|---|---|
+| `models/raw/` | Meshy 下載的原始檔（GLB/FBX…），Meshy 的 `meshy_output/` 紀錄也在這裡 | 否 |
+| `models/optimized/` | 壓縮後的 GLB，網頁透過 jsDelivr 載入這裡的檔案 | 是 |
+| `sources/` | Blender `.blend` 等工作檔 | 否 |
+| `pages/` | 網頁（model-viewer 展示、Three.js 互動） | 是 |
+| `scripts/` | 工具腳本（模型壓縮） | 是 |
+
+## 做法選擇
+
+- **機械件、精確幾何**（油封、O-ring、油壓缸剖面、魯班鎖、地球、細胞分層）：用 Three.js 程式產生（`LatheGeometry`、`ExtrudeGeometry` 等），做成參數化，不要用 AI 生成。
+- **角色、怪獸、飛機、動物、器官**：用 Meshy 生成。
+- 常見物件先查 Sketchfab / Poly Pizza 有沒有免費模型；CC-BY 授權要在頁面標示作者。
+
+## Meshy 生成流程
+
+1. 用 `.claude/skills/meshy-3d-generation` skill。輸出位置一律指定 `models/raw/`，檔名用英文小寫加連字號（例如 `models/raw/sky-plane.glb`）。
+2. 生成會花 credits，開始前先跟使用者確認 prompt 與預估花費。
+3. 壓縮：`npm run optimize`（處理 `models/raw/` 裡所有 `.glb`，輸出到 `models/optimized/`）。平板上每個模型控制在 2–5 MB 以內。
+4. commit 並 push 後，用 jsDelivr 載入（見下方）。
+
+MCP server（`.mcp.json` 的 `meshy`）是備用通道，需要 Pro 方案的 API key，從環境變數 `MESHY_API_KEY` 讀取。API key 不可寫進任何檔案。
+
+## jsDelivr 載入
+
+```
+https://cdn.jsdelivr.net/gh/<GitHub帳號>/<repo>@<版本>/models/optimized/<檔名>.glb
+```
+
+- `<版本>` 正式使用時用 tag（例如 `@v1.0.0`）或 commit hash，內容固定不會被快取影響；`@main` 會被快取最多 12 小時，只適合測試。
+- 更新 `@main` 後要立即生效，可開 `https://purge.jsdelivr.net/gh/<帳號>/<repo>@main/<路徑>` 清快取。
+- 單檔上限 20 MB，repo 必須是 public。
+- GAS 網頁不要用 HtmlService 或 Google Drive 放模型檔，一律用 jsDelivr 網址。
+
+## 網頁
+
+- 純展示：`pages/viewer.html`（Google `<model-viewer>`），用 `?src=` 帶模型網址。
+- 互動或遊戲：`pages/three-template.html`（Three.js + GLTFLoader + MeshoptDecoder，壓縮後的 GLB 需要 MeshoptDecoder 才能讀）。
+- model-viewer 讀 meshopt 壓縮檔要先設定 `meshoptDecoderLocation`（`viewer.html` 已寫好）。
+- 本機預覽：`.claude/launch.json` 的 `pages`（python http.server，port 8123），網址 `http://localhost:8123/pages/...`。
+- CDN 版本號要寫死，不要用 `@latest`。
