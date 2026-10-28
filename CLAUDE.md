@@ -62,3 +62,12 @@ https://cdn.jsdelivr.net/gh/<GitHub帳號>/<repo>@<版本>/models/optimized/<檔
 - model-viewer 讀 meshopt 壓縮檔要先設定 `meshoptDecoderLocation`（`viewer.html` 已寫好）。
 - 本機預覽：`.claude/launch.json` 的 `pages`（python http.server，port 8123），網址 `http://localhost:8123/pages/...`。
 - CDN 版本號要寫死，不要用 `@latest`。
+
+## 成語遊戲（`成語/`，GAS 專案，不進 git）
+
+- 用全域的 three.js **r128**（非 module）。r128 讀 meshopt 壓縮＋量化的 GLB 會變形，給它用的模型要另做不壓縮版：
+  `node node_modules/@gltf-transform/cli/bin/cli.js optimize models/raw/X.glb models/optimized/X-r128.glb --compress false --texture-compress false`
+- 載入器：`Index.html` 加了 r128 的 GLTFLoader 與 meshopt_decoder；`Scene3D.html` 的 `loadGLB()`／`glbThumb()`／`view3DItem()` 共用快取。
+- 商品加 `glb` 欄位就會：商店與寶物庫顯示 3D 小圖（點了開 360° 視窗），勇者手上換成該模型（`buildHero3D`）。
+- 本機測試：把 include 合併成 `tmp-preview/game.html`（不進 git）再用 `pages` 伺服器開。
+- 修改前的備份在 `成語_backup_20261028/`。
