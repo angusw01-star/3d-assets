@@ -36,6 +36,7 @@ Blender 5.2 安裝在 `C:\Program Files\Blender Foundation\Blender 5.2\`。
 **主力：背景腳本**（不開視窗，穩定、可批次）
 - `npm run prep -- <輸入檔> [--faces 50000] [--out 輸出.glb]`：匯入 GLB/glTF/FBX/OBJ/STL，可減面，匯出 GLB 到 `models/raw/`（減面時檔名加 `-lite`）。接著再跑 `npm run optimize`。
 - 平板用的模型建議 2 萬–5 萬個三角面。
+- 程式產生的遊戲道具（例如 `scripts/blender/make_sword.py` 寶劍）：`blender -b --factory-startup --python scripts/blender/make_sword.py -- models/raw/treasure-sword.glb sources/treasure-sword.blend`，再 `npm run optimize`。卡通低面數（幾千面）、原點在模型中心。
 - 其他處理（拆部件、改材質、算體積…）寫成 `scripts/blender/*.py`，用 `blender -b --factory-startup --python 腳本.py -- 參數` 執行。
 
 **選配：Blender MCP**（使用者打開 Blender，Claude 即時操作）
