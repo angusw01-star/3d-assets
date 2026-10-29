@@ -375,8 +375,9 @@ def spirit_xing(stage):
     export(f'xing-{stage}')
 
 
-hero('b')
-hero('g')
-for st in (1, 2, 3):
-    spirit_yin(st)
-    spirit_xing(st)
+if __name__ == '__main__':
+    hero('b')
+    hero('g')
+    for st in (1, 2, 3):
+        spirit_yin(st)
+        spirit_xing(st)
