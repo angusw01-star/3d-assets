@@ -139,48 +139,162 @@ def export(name):
     print(f'MODEL {name}: {tris:,} tris')
 
 
-# ---------- 勇者（字靈大師） ----------
-def hero():
-    reset()
-    skin, hair = mat('Skin', hexc('#ffd8bd'), rough=0.7), mat('Hair', hexc('#3a2a20'), rough=0.6)
-    coat, trim = mat('Coat', hexc('#2f6fb8'), rough=0.6), mat('Trim', hexc('#ffc93c'), metal=0.6, rough=0.35)
-    pants, boot = mat('Pants', hexc('#334055'), rough=0.7), mat('Boot', hexc('#6b3f22'), rough=0.6)
-    scarf = mat('Scarf', hexc('#e8463c'), rough=0.6)
-    book = mat('Book', hexc('#7a3fb0'), rough=0.5)
-    page = mat('Page', hexc('#fff6dc'), rough=0.8)
-    glow = mat('BookGlow', hexc('#9fe8ff'), emit=hexc('#7fe0ff'), strength=3)
-    # 腳、腿
+# ---------- 勇者（字靈大師）：男生帥氣、女生漂亮；約 3.5 頭身 ----------
+def face_eye(z, x, y, r, iris, lash=False, brow_tilt=0.0, hair_m=None):
+    """較細緻的眼睛：眼白＋虹膜＋瞳孔＋兩點反光，可加睫毛與眉毛。臉朝 -Y。"""
+    white = mat('EyeWhite', (1, 1, 1), rough=0.3)
+    irm = mat('Iris' + iris, hexc(iris), rough=0.25)
+    pupil = mat('EyeBlack', hexc('#1d1a2a'), rough=0.2)
+    shine = mat('EyeShine', (1, 1, 1), emit=(1, 1, 1), strength=1.5)
     for s in (-1, 1):
-        sphere(f'Boot{s}', (s * 0.11, -0.03, 0.06), 0.085, boot, scale=(1, 1.3, 0.75))
-        cone(f'Leg{s}', (s * 0.11, 0, 0.2), 0.065, 0.07, 0.2, pants)
-    # 身體：長大衣（下襬外張）
-    lathe('Coat', [(0.0, 0.26), (0.26, 0.26), (0.22, 0.45), (0.19, 0.62), (0.15, 0.68), (0.0, 0.7)], coat)
-    torus('Belt', (0, 0, 0.42), 0.215, 0.022, trim)
-    sphere('Buckle', (0, -0.225, 0.42), 0.035, trim, scale=(1, 0.5, 1))
-    # 圍巾（兩段飄帶）
-    torus('Scarf', (0, 0, 0.67), 0.15, 0.045, scarf)
-    cone('ScarfTail', (0.1, 0.13, 0.55), 0.05, 0.02, 0.25, scarf, rot=(0.5, -0.4, 0))
+        sphere(f'EyeW{s}', (s * x, y + r * 0.35, z), r * 1.05, white, scale=(1.0, 0.45, 1.25))
+        sphere(f'Iris{s}', (s * x, y, z - r * 0.05), r * 0.78, irm, scale=(1, 0.5, 1.2))
+        sphere(f'Pupil{s}', (s * x, y - r * 0.12, z - r * 0.05), r * 0.42, pupil, scale=(1, 0.5, 1.2))
+        sphere(f'ShineA{s}', (s * x + r * 0.3, y - r * 0.3, z + r * 0.35), r * 0.24, shine)
+        sphere(f'ShineB{s}', (s * x - r * 0.25, y - r * 0.3, z - r * 0.4), r * 0.12, shine)
+        if hair_m:                                        # 眉毛
+            b = sphere(f'Brow{s}', (s * x, y + r * 0.2, z + r * 1.75), r * 0.75, hair_m, scale=(1.3, 0.3, 0.22))
+            b.rotation_euler = (0, s * brow_tilt, 0)
+        if lash:                                          # 外眼角睫毛
+            cone(f'Lash{s}', (s * (x + r * 0.95), y + r * 0.2, z + r * 0.9), r * 0.18, 0.0, r * 0.6, pupil,
+                 rot=(0, s * 0.9, 0), seg=6)
+
+
+def cape(name, z_top, z_bot, w_top, w_bot, m, back=0.17, nx=10, nz=8):
+    """披風：從肩膀垂到背後，下襬外張、略微彎曲。"""
+    bm = bmesh.new()
+    grid = []
+    for j in range(nz + 1):
+        t = j / nz
+        z = z_top + (z_bot - z_top) * t
+        w = w_top + (w_bot - w_top) * t
+        row = []
+        for i in range(nx + 1):
+            u = i / nx * 2 - 1
+            y = back + 0.06 * t + 0.08 * (1 - u * u) * (0.4 + t)
+            row.append(bm.verts.new((u * w, y, z)))
+        grid.append(row)
+    for j in range(nz):
+        for i in range(nx):
+            bm.faces.new((grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i]))
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    m.use_backface_culling = False
+    return link(bpy.data.objects.new(name, me), m)
+
+
+def group(name, loc, rot, parts):
+    g = bpy.data.objects.new(name, None)
+    bpy.context.scene.collection.objects.link(g)
+    for o in parts:
+        o.parent = g
+    g.location, g.rotation_euler = loc, rot
+    return g
+
+
+def hero(gender):
+    reset()
+    boy = gender == 'b'
+    skin = mat('Skin', hexc('#ffdcc4'), rough=0.6)
+    hair = mat('Hair', hexc('#3b2a22' if boy else '#4a2a5e'), rough=0.45)
+    gold = mat('Gold', hexc('#ffcf4a'), metal=0.75, rough=0.3)
+    glow = mat('Glow', hexc('#9fe8ff'), emit=hexc('#7fe0ff'), strength=3)
+    mouth = mat('Mouth', hexc('#c95b5b'), rough=0.6)
+    if boy:
+        top, cloth2, capem = mat('Tunic', hexc('#2b5fa8'), rough=0.55), mat('Pants', hexc('#2a3348'), rough=0.7), mat('Cape', hexc('#c0392b'), rough=0.6)
+        armor, boot = mat('Armor', hexc('#cfd8e6'), metal=0.7, rough=0.3), mat('Boot', hexc('#5a3520'), rough=0.55)
+    else:
+        top, cloth2, capem = mat('Bodice', hexc('#fbf7ff'), rough=0.6), mat('Skirt', hexc('#7b5cd6'), rough=0.55), mat('Cape', hexc('#b9a4f0'), rough=0.6)
+        armor, boot = mat('Armor', hexc('#fff3fb'), metal=0.3, rough=0.4), mat('Boot', hexc('#f4f0ff'), rough=0.5)
+
+    # 腳與腿
+    for s in (-1, 1):
+        sphere(f'Toe{s}', (s * 0.09, -0.04, 0.045), 0.065, boot, scale=(0.9, 1.4, 0.7))
+        cone(f'BootShaft{s}', (s * 0.09, 0, 0.15), 0.06, 0.068, 0.2, boot)
+        torus(f'BootCuff{s}', (s * 0.09, 0, 0.25), 0.068, 0.014, gold)
+        cone(f'Leg{s}', (s * 0.09, 0, 0.37), 0.055, 0.062, 0.24, cloth2 if boy else skin)
+
+    if boy:
+        # 上衣下襬＋胸甲＋肩甲
+        lathe('Tunic', [(0.0, 0.46), (0.21, 0.46), (0.19, 0.56), (0.17, 0.72), (0.19, 0.86), (0.12, 0.93), (0.0, 0.94)], top)
+        sphere('Chest', (0, -0.06, 0.78), 0.17, armor, scale=(1.05, 0.75, 0.75))
+        ico('ChestGem', (0, -0.19, 0.8), 0.028, glow)
+        for s in (-1, 1):
+            sphere(f'Pauldron{s}', (s * 0.2, 0, 0.88), 0.09, armor, scale=(1.1, 1.0, 0.7))
+            torus(f'PauldronRim{s}', (s * 0.2, 0, 0.85), 0.085, 0.012, gold)
+    else:
+        # 連身裙：外張裙擺＋白色上身＋泡泡袖
+        lathe('Dress', [(0.0, 0.38), (0.3, 0.38), (0.26, 0.48), (0.17, 0.62), (0.14, 0.66), (0.15, 0.8), (0.16, 0.88), (0.1, 0.94), (0.0, 0.95)], cloth2)
+        lathe('Bodice', [(0.0, 0.64), (0.155, 0.64), (0.16, 0.8), (0.17, 0.88), (0.105, 0.945), (0.0, 0.955)], top)
+        torus('Hem', (0, 0, 0.39), 0.295, 0.016, gold)
+        sphere('Brooch', (0, -0.165, 0.84), 0.03, glow)
+        for s in (-1, 1):
+            sphere(f'Puff{s}', (s * 0.19, 0, 0.87), 0.075, top, scale=(1.1, 1.0, 0.85))
+    torus('Belt', (0, 0, 0.6 if boy else 0.65), 0.18 if boy else 0.16, 0.018, gold)
+
     # 手臂與手
     for s in (-1, 1):
-        cone(f'Arm{s}', (s * 0.24, 0, 0.55), 0.055, 0.065, 0.22, coat, rot=(0, s * 0.35, 0))
-        sphere(f'Hand{s}', (s * 0.29, -0.02, 0.43), 0.05, skin)
-    # 左手拿一本發光的「字典」
-    bk = cone('Book', (-0.32, -0.08, 0.45), 0.1, 0.1, 0.045, book, rot=(1.2, 0, 0.3), seg=4, smooth=False)
-    bk.scale = (1.2, 0.8, 1)
-    cone('Pages', (-0.32, -0.1, 0.458), 0.088, 0.088, 0.05, page, rot=(1.2, 0, 0.3), seg=4, smooth=False).scale = (1.2, 0.8, 1)
-    ico('BookRune', (-0.34, -0.16, 0.52), 0.03, glow)
-    # 頭（大頭身）
-    sphere('Head', (0, 0, 0.98), 0.28, skin)
-    hc = sphere('HairCap', (0, 0.03, 1.04), 0.295, hair, scale=(1, 1, 0.85))
-    for i, a in enumerate((-0.7, -0.3, 0.1, 0.5)):        # 瀏海尖角
-        cone(f'Bang{i}', (math.sin(a) * 0.2, -0.22, 1.13), 0.07, 0.0, 0.16, hair, rot=(2.5, 0, a * 0.8), seg=6)
-    cone('Ahoge', (0.03, 0.02, 1.33), 0.03, 0.0, 0.14, hair, rot=(0.4, 0.2, 0), seg=6)
-    eyes(0.97, 0.1, -0.255, 0.045)
-    blush(0.9, 0.17, -0.24, 0.04)
-    # 頭帶：金色，額頭有「字」形寶石
-    torus('Band', (0, 0, 1.08), 0.285, 0.018, trim, rot=(0.1, 0, 0))
-    ico('BandGem', (0, -0.29, 1.06), 0.035, glow)
-    export('hero')
+        cone(f'Arm{s}', (s * 0.24, 0, 0.73), 0.042, 0.05, 0.28, top, rot=(0, s * 0.18, 0))
+        torus(f'Glove{s}', (s * 0.265, 0, 0.6), 0.045, 0.012, gold)
+        sphere(f'Hand{s}', (s * 0.27, -0.01, 0.56), 0.045, skin)
+
+    # 披風
+    cape('Cape', 0.9, 0.3 if boy else 0.42, 0.2, 0.3 if boy else 0.26, capem)
+
+    # 脖子、頭、臉
+    cone('Neck', (0, 0, 0.97), 0.045, 0.045, 0.08, skin)
+    sphere('Head', (0, 0, 1.15), 0.2, skin, scale=(0.95, 0.95, 1.05))
+    sphere('Chin', (0, -0.06, 1.03), 0.11, skin, scale=(0.9, 0.9, 0.8))
+    face_eye(1.13, 0.072, -0.178, 0.036, '#c9822b' if boy else '#8b5fd6', lash=not boy,
+             brow_tilt=-0.25 if boy else 0.1, hair_m=hair)
+    sphere('Mouth', (0, -0.185, 1.05), 0.02, mouth, scale=(1.3, 0.4, 0.45))
+    if not boy:
+        blush(1.08, 0.12, -0.17, 0.028)
+
+    # 頭髮
+    sphere('HairCap', (0, 0.025, 1.19), 0.212, hair, scale=(1.0, 1.0, 0.95))
+    if boy:
+        # 往後翹的刺蝟頭＋側分瀏海＋鬢角
+        for i, (ax, az) in enumerate([(-0.5, 0.2), (-0.15, 0.35), (0.2, 0.3), (0.5, 0.15), (-0.3, -0.1), (0.3, -0.1), (0.0, 0.05)]):
+            cone(f'Spike{i}', (math.sin(ax) * 0.14, 0.12, 1.28 + az * 0.15), 0.07, 0.0, 0.22, hair, rot=(-1.1 - az, ax * 0.6, 0), seg=6)
+        for i, a in enumerate((-0.55, -0.2, 0.15)):
+            cone(f'Bang{i}', (math.sin(a) * 0.15 + 0.02, -0.15, 1.28), 0.055, 0.0, 0.16, hair, rot=(2.4, 0, 0.6 + a * 0.5), seg=6)
+        for s in (-1, 1):
+            cone(f'Side{s}', (s * 0.18, -0.06, 1.12), 0.04, 0.0, 0.14, hair, rot=(math.pi, s * 0.3, 0), seg=6)
+        # 背上的劍
+        blade = mat('Blade', hexc('#e3ecf7'), metal=0.6, rough=0.2)
+        group('BackSword', (0.05, 0.2, 0.62), (0, 0.6, 0), [
+            cone('SwBlade', (0, 0, 0.32), 0.035, 0.012, 0.6, blade, seg=4, smooth=False),
+            cone('SwGuard', (0, 0, 0.0), 0.1, 0.1, 0.03, gold, rot=(0, math.pi / 2, 0), seg=8),
+            cone('SwGrip', (0, 0, -0.1), 0.02, 0.02, 0.16, mat('Grip', hexc('#4a2c12'))),
+            sphere('SwPommel', (0, 0, -0.19), 0.03, gold)])
+        # 左手拿發光字典
+        book = mat('Book', hexc('#7a3fb0'), rough=0.5)
+        bk = cone('Book', (-0.31, -0.07, 0.56), 0.08, 0.08, 0.04, book, rot=(1.2, 0, 0.3), seg=4, smooth=False)
+        bk.scale = (1.2, 0.8, 1)
+        ico('BookRune', (-0.33, -0.13, 0.61), 0.025, glow)
+    else:
+        # 長髮垂到腰、兩側長鬢、齊瀏海、大蝴蝶結、小皇冠
+        sphere('BackHair', (0, 0.1, 0.95), 0.2, hair, scale=(1.05, 0.7, 1.55))
+        for s in (-1, 1):
+            cone(f'Lock{s}', (s * 0.17, -0.04, 0.98), 0.055, 0.03, 0.34, hair)
+            sphere(f'LockEnd{s}', (s * 0.17, -0.04, 0.8), 0.035, hair)
+        for i, a in enumerate((-0.6, -0.3, 0.0, 0.3, 0.6)):
+            cone(f'Bang{i}', (math.sin(a) * 0.15, -0.15, 1.27), 0.05, 0.0, 0.13, hair, rot=(2.7, 0, a * 0.4), seg=6)
+        ribbon = mat('Ribbon', hexc('#ff6fa8'), rough=0.5)
+        for s in (-1, 1):
+            cone(f'Bow{s}', (s * 0.08, 0.16, 1.3), 0.08, 0.02, 0.14, ribbon, rot=(0, s * math.pi / 2, 0.2 * s), seg=4)
+        sphere('BowKnot', (0, 0.17, 1.3), 0.035, ribbon)
+        torus('Tiara', (0, -0.02, 1.27), 0.17, 0.01, gold, rot=(0.35, 0, 0))
+        ico('TiaraGem', (0, -0.18, 1.3), 0.025, glow)
+        # 右手的大毛筆法杖
+        group('BrushStaff', (0.29, -0.02, 0.62), (0.08, 0.08, 0), [
+            cone('StaffShaft', (0, 0, 0.0), 0.018, 0.018, 0.95, mat('Bamboo', hexc('#c9a26b'), rough=0.6)),
+            torus('StaffRing', (0, 0, 0.43), 0.024, 0.008, gold),
+            cone('StaffHair', (0, 0, 0.55), 0.045, 0.0, 0.18, mat('InkBrush', hexc('#2b2a6b'), rough=0.4)),
+            ico('StaffTip', (0, 0, 0.66), 0.03, glow)])
+    export('hero-' + gender)
 
 
 # ---------- 字靈共用：三段進化 ----------
@@ -261,7 +375,8 @@ def spirit_xing(stage):
     export(f'xing-{stage}')
 
 
-hero()
+hero('b')
+hero('g')
 for st in (1, 2, 3):
     spirit_yin(st)
     spirit_xing(st)
